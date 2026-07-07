@@ -11,6 +11,8 @@ import {
   Check,
   X,
   Zap,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLead } from "@/hooks/use-leads";
@@ -45,7 +47,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, formatDistanceToNow } from "date-fns";
+import { addCustomProgressOption } from "@/lib/auth";
 
 export const Route = createFileRoute("/leads/$id")({
   head: () => ({
@@ -76,6 +81,27 @@ function LeadDetail() {
   const [note, setNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [updatingProgress, setUpdatingProgress] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [newStatus, setNewStatus] = useState("");
+  const [addingStatus, setAddingStatus] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+
+  const handleAddStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStatus.trim() || !user) return;
+    setAddingStatus(true);
+    try {
+      await addCustomProgressOption(user.uid, newStatus.trim());
+      toast.success("Status added");
+      setStatusDialogOpen(false);
+      changeProgress(newStatus.trim());
+      setNewStatus("");
+    } catch (err: any) {
+      toast.error("Failed to add status");
+    } finally {
+      setAddingStatus(false);
+    }
+  };
 
   useEffect(() => {
     if (lead) setNameDraft(lead.name);
@@ -153,8 +179,8 @@ function LeadDetail() {
     }
   };
 
-  const submitNote = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitNote = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!note.trim()) return;
     setSavingNote(true);
     try {
@@ -299,11 +325,41 @@ function LeadDetail() {
           </div>
         </section>
 
+// Removing the incorrectly placed snippet
         {/* Progress selector */}
         <section className="card-surface p-4">
-          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Progress
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Progress
+            </label>
+            <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-6 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-primary">
+                  + Add Custom
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[320px]">
+                <DialogHeader>
+                  <DialogTitle className="text-base">Add custom status</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleAddStatus} className="space-y-4">
+                  <Input
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    placeholder="e.g. Site Visit Done"
+                    autoFocus
+                  />
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setStatusDialogOpen(false)} disabled={addingStatus}>Cancel</Button>
+                    <Button type="submit" disabled={!newStatus.trim() || addingStatus} className="gradient-primary">
+                      {addingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Add Status
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
           <div className="mt-2">
             <Select
               value={lead.progress}
@@ -314,7 +370,7 @@ function LeadDetail() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROGRESS_OPTIONS.map((p) => (
+                {[...PROGRESS_OPTIONS, ...(profile?.customProgressOptions || [])].map((p) => (
                   <SelectItem key={p} value={p}>
                     {p}
                   </SelectItem>
@@ -331,33 +387,36 @@ function LeadDetail() {
 
         {/* Add note */}
         <section className="card-surface p-4">
-          <form onSubmit={submitNote} className="space-y-2">
-            <label htmlFor="note" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Add a note
-            </label>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label htmlFor="note" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Add a note
+              </label>
+              {savingNote && (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+                </span>
+              )}
+            </div>
             <Textarea
               id="note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Log a conversation, follow-up or reminder…"
+              onBlur={() => {
+                if (note.trim()) submitNote();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (note.trim()) submitNote();
+                }
+              }}
+              placeholder="Log a conversation, follow-up or reminder… (Press Enter to save)"
               className="min-h-24"
               maxLength={2000}
+              disabled={savingNote}
             />
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                disabled={!note.trim() || savingNote}
-                className="gradient-primary"
-              >
-                {savingNote ? (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-1.5 h-4 w-4" />
-                )}
-                Save note
-              </Button>
-            </div>
-          </form>
+          </div>
         </section>
 
         {/* Attachments */}
@@ -366,15 +425,30 @@ function LeadDetail() {
         </section>
 
         {/* Timeline */}
-        <section className="card-surface p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">Conversation timeline</h3>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {lead.timeline.length} update{lead.timeline.length === 1 ? "" : "s"}
-            </span>
+        <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen} className="card-surface p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Conversation timeline</h3>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {lead.timeline.length} update{lead.timeline.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                {timelineOpen ? (
+                  <>Hide <ChevronUp className="h-3.5 w-3.5" /></>
+                ) : (
+                  <>View History <ChevronDown className="h-3.5 w-3.5" /></>
+                )}
+              </Button>
+            </CollapsibleTrigger>
           </div>
-          <Timeline entries={lead.timeline} />
-        </section>
+          <CollapsibleContent className="data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden">
+            <div className="pt-2">
+              <Timeline entries={lead.timeline} />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </main>
     </div>
   );

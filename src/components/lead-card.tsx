@@ -1,11 +1,24 @@
 import { Link } from "@tanstack/react-router";
-import { Phone, MessageCircle, ChevronRight, Clock } from "lucide-react";
+import { Phone, MessageCircle, ChevronRight, Clock, Pencil, Loader2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import type { Lead } from "@/lib/types";
 import { ProgressBadge } from "./progress-badge";
 import { formatIndianMobile } from "@/lib/phone";
 import { formatDistanceToNow } from "date-fns";
+import { updateLead } from "@/lib/leads";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 export function LeadCard({ lead }: { lead: Lead }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftName, setDraftName] = useState(lead.name);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDraftName(lead.name);
+  }, [lead.name]);
+
   const initials = (lead.name || "?")
     .split(" ")
     .map((s) => s[0])
@@ -13,7 +26,39 @@ export function LeadCard({ lead }: { lead: Lead }) {
     .slice(0, 2)
     .toUpperCase();
 
-  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const stop = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleSave = async () => {
+    if (draftName.trim() === lead.name) {
+      setIsEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateLead(lead.id, { name: draftName.trim() });
+      toast.success("Name updated");
+      setIsEditing(false);
+    } catch (err: any) {
+      toast.error("Failed to update name");
+      setDraftName(lead.name);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      stop(e);
+      handleSave();
+    } else if (e.key === "Escape") {
+      stop(e);
+      setDraftName(lead.name);
+      setIsEditing(false);
+    }
+  };
 
   return (
     <Link
@@ -28,9 +73,38 @@ export function LeadCard({ lead }: { lead: Lead }) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-sm font-semibold text-foreground">
-                {lead.name || "Unnamed Lead"}
-              </h3>
+              {isEditing ? (
+                <div className="relative" onClick={stop}>
+                  <Input
+                    ref={inputRef}
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onBlur={handleSave}
+                    onKeyDown={handleKeyDown}
+                    disabled={saving}
+                    className="h-7 px-2 py-1 text-sm font-semibold sm:w-[160px]"
+                    autoFocus
+                  />
+                  {saving && (
+                    <Loader2 className="absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+              ) : (
+                <div
+                  className="group/name flex cursor-pointer items-center gap-1 rounded-sm hover:bg-muted/50 px-1 -ml-1"
+                  onClick={(e) => {
+                    stop(e);
+                    setIsEditing(true);
+                    setTimeout(() => inputRef.current?.focus(), 0);
+                  }}
+                  title="Click to edit name"
+                >
+                  <h3 className="truncate text-sm font-semibold text-foreground">
+                    {lead.name}
+                  </h3>
+                  <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover/name:opacity-100 text-muted-foreground" />
+                </div>
+              )}
               <ProgressBadge progress={lead.progress} />
             </div>
             <p className="mt-0.5 truncate text-xs text-muted-foreground tabular-nums">

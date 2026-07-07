@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PROGRESS_OPTIONS, type Progress } from "@/lib/types";
+import { useAuth } from "@/hooks/use-auth";
 
 export type DateFilter = "today" | "yesterday" | "last3" | "last4" | "last5" | "all" | "custom";
 
@@ -37,6 +38,7 @@ export function FiltersBar({
   filters: FiltersState;
   onChange: (next: FiltersState) => void;
 }) {
+  const { profile } = useAuth();
   const patch = (p: Partial<FiltersState>) => onChange({ ...filters, ...p });
 
   return (
@@ -70,7 +72,7 @@ export function FiltersBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
-            {PROGRESS_OPTIONS.map((p) => (
+            {[...PROGRESS_OPTIONS, ...(profile?.customProgressOptions || [])].map((p) => (
               <SelectItem key={p} value={p}>
                 {p}
               </SelectItem>

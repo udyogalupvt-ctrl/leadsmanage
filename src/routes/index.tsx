@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { Sparkles, Inbox, Zap, LogOut } from "lucide-react";
+import { Sparkles, Inbox, Zap, LogOut, ChevronDown, ChevronUp } from "lucide-react";
 import { useLeads } from "@/hooks/use-leads";
 import { useAuth } from "@/hooks/use-auth";
 import { SummaryCards } from "@/components/summary-cards";
@@ -11,6 +11,7 @@ import { FiltersBar, filterLeads, type FiltersState } from "@/components/filters
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -41,6 +42,7 @@ function Dashboard() {
     progress: "all",
     dateFilter: "today",
   });
+  const [overviewOpen, setOverviewOpen] = useState(false);
 
   const all = leads ?? [];
   const filtered = useMemo(() => filterLeads(all, filters), [all, filters]);
@@ -109,23 +111,36 @@ function Dashboard() {
           </div>
         )}
 
-        <section>
-          <div className="mb-3 flex items-center justify-between">
+        <Collapsible open={overviewOpen} onOpenChange={setOverviewOpen} className="space-y-3">
+          <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold tracking-tight sm:text-xl">Overview</h2>
               <p className="text-xs text-muted-foreground">Live snapshot across your pipeline</p>
             </div>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                {overviewOpen ? (
+                  <>Hide Overview <ChevronUp className="h-3.5 w-3.5" /></>
+                ) : (
+                  <>Show Overview <ChevronDown className="h-3.5 w-3.5" /></>
+                )}
+              </Button>
+            </CollapsibleTrigger>
           </div>
-          {leadsLoading ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 rounded-xl" />
-              ))}
+          <CollapsibleContent className="data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden">
+            <div className="pt-1">
+              {leadsLoading ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-24 rounded-xl" />
+                  ))}
+                </div>
+              ) : (
+                <SummaryCards leads={all} />
+              )}
             </div>
-          ) : (
-            <SummaryCards leads={all} />
-          )}
-        </section>
+          </CollapsibleContent>
+        </Collapsible>
 
         <section className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
           <div className="lg:sticky lg:top-[76px] lg:h-fit">

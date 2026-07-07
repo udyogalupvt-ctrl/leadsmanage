@@ -9,7 +9,7 @@ export const PROGRESS_OPTIONS = [
   "Not Interested",
 ] as const;
 
-export type Progress = (typeof PROGRESS_OPTIONS)[number];
+export type Progress = string;
 
 export type UseCase = "education" | "realestate";
 
@@ -19,6 +19,7 @@ export type UserProfile = {
   email: string;
   useCase: UseCase;
   createdAt: number;
+  customProgressOptions?: string[];
 };
 
 export type TimelineEntry = {
@@ -59,7 +60,7 @@ export type Lead = {
   visits: Visit[];
 };
 
-export const PROGRESS_TONE: Record<Progress, string> = {
+export const PROGRESS_TONE: Record<string, string> = {
   New: "badge-new",
   Contacted: "badge-contacted",
   "Follow Up": "badge-followup",

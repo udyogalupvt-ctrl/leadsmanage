@@ -12,6 +12,7 @@ import {
   where,
   getDocs,
   serverTimestamp,
+  getCountFromServer,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Lead, Progress, TimelineEntry, Attachment, Visit, UseCase } from "./types";
@@ -83,11 +84,19 @@ export async function createLead(input: {
     return dupSnap.docs[0].id;
   }
 
+  let finalName = input.name.trim();
+  if (!finalName) {
+    const countSnap = await getCountFromServer(
+      query(collection(db, COLLECTION), where("userId", "==", input.userId))
+    );
+    finalName = `C${countSnap.data().count + 1}`;
+  }
+
   const now = Date.now();
   const entry: TimelineEntry = { ts: now, note: input.note.trim() || "Lead created", action: "created" };
   const ref = await addDoc(collection(db, COLLECTION), {
     userId: input.userId,
-    name: input.name || "Unnamed Lead",
+    name: finalName,
     phone: input.phone,
     progress: "New",
     lastNote: input.note.trim(),
@@ -114,6 +123,11 @@ export async function bulkCreateLeads(
   const toCreate = unique.filter((p) => !existing.has(p));
   const duplicates = unique.length - toCreate.length;
 
+  const countSnap = await getCountFromServer(
+    query(collection(db, COLLECTION), where("userId", "==", userId))
+  );
+  let currentCount = countSnap.data().count;
+
   // Firestore batch limit 500
   for (let i = 0; i < toCreate.length; i += 400) {
     const batch = writeBatch(db);
@@ -121,9 +135,10 @@ export async function bulkCreateLeads(
     for (const phone of slice) {
       const now = Date.now();
       const ref = doc(collection(db, COLLECTION));
+      currentCount++;
       batch.set(ref, {
         userId,
-        name: "Unnamed Lead",
+        name: `C${currentCount}`,
         phone,
         progress: "New",
         lastNote: "Imported via bulk paste",

@@ -6,7 +6,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { UseCase, UserProfile } from "./types";
 
@@ -63,6 +63,7 @@ export async function saveUserProfile(
     email: data.email,
     useCase: data.useCase,
     createdAt: Date.now(),
+    customProgressOptions: [],
   });
 }
 
@@ -76,5 +77,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     email: d.email ?? "",
     useCase: d.useCase ?? "realestate",
     createdAt: d.createdAt ?? Date.now(),
+    customProgressOptions: Array.isArray(d.customProgressOptions) ? d.customProgressOptions : [],
   };
+}
+
+export async function addCustomProgressOption(uid: string, option: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), {
+    customProgressOptions: arrayUnion(option.trim()),
+  });
 }
