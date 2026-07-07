@@ -13,11 +13,12 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLead } from "@/hooks/use-leads";
 import { useAuth } from "@/hooks/use-auth";
-import { addNote, deleteLead, updateLead } from "@/lib/leads";
+import { addNote, deleteLead, updateLead, migrateLeadProgress } from "@/lib/leads";
 import { PROGRESS_OPTIONS, type Progress } from "@/lib/types";
 import { formatIndianMobile } from "@/lib/phone";
 import { ProgressBadge } from "@/components/progress-badge";
@@ -50,7 +51,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, formatDistanceToNow } from "date-fns";
-import { addCustomProgressOption } from "@/lib/auth";
+import { addCustomProgressOption, removeCustomProgressOption, renameCustomProgressOption } from "@/lib/auth";
 
 export const Route = createFileRoute("/leads/$id")({
   head: () => ({
@@ -85,6 +86,8 @@ function LeadDetail() {
   const [newStatus, setNewStatus] = useState("");
   const [addingStatus, setAddingStatus] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [editingStatus, setEditingStatus] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
 
   const handleAddStatus = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,11 +96,38 @@ function LeadDetail() {
     try {
       await addCustomProgressOption(user.uid, newStatus.trim());
       toast.success("Status added");
-      setStatusDialogOpen(false);
-      changeProgress(newStatus.trim());
       setNewStatus("");
     } catch (err: any) {
       toast.error("Failed to add status");
+    } finally {
+      setAddingStatus(false);
+    }
+  };
+
+  const handleDeleteStatus = async (status: string) => {
+    if (!user) return;
+    try {
+      await removeCustomProgressOption(user.uid, status);
+      toast.success("Status deleted");
+    } catch (err: any) {
+      toast.error("Failed to delete status");
+    }
+  };
+
+  const handleRenameStatus = async (oldStatus: string) => {
+    if (!user || !editingValue.trim() || editingValue.trim() === oldStatus) {
+      setEditingStatus(null);
+      return;
+    }
+    setAddingStatus(true);
+    try {
+      const next = editingValue.trim();
+      await renameCustomProgressOption(user.uid, oldStatus, next);
+      await migrateLeadProgress(user.uid, oldStatus, next);
+      toast.success("Status renamed and leads migrated");
+      setEditingStatus(null);
+    } catch (err: any) {
+      toast.error("Failed to rename status");
     } finally {
       setAddingStatus(false);
     }
@@ -325,7 +355,6 @@ function LeadDetail() {
           </div>
         </section>
 
-// Removing the incorrectly placed snippet
         {/* Progress selector */}
         <section className="card-surface p-4">
           <div className="flex items-center justify-between">
@@ -334,29 +363,69 @@ function LeadDetail() {
             </label>
             <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-primary">
-                  + Add Custom
+                <Button variant="ghost" size="sm" className="h-6 gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-primary">
+                  <Settings className="h-3 w-3" /> Manage Statuses
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[320px]">
+              <DialogContent className="sm:max-w-[400px]">
                 <DialogHeader>
-                  <DialogTitle className="text-base">Add custom status</DialogTitle>
+                  <DialogTitle className="text-base">Manage custom statuses</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleAddStatus} className="space-y-4">
-                  <Input
-                    value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
-                    placeholder="e.g. Site Visit Done"
-                    autoFocus
-                  />
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setStatusDialogOpen(false)} disabled={addingStatus}>Cancel</Button>
-                    <Button type="submit" disabled={!newStatus.trim() || addingStatus} className="gradient-primary">
-                      {addingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Add Status
-                    </Button>
-                  </DialogFooter>
-                </form>
+                <div className="space-y-4 py-2">
+                  {profile?.customProgressOptions && profile.customProgressOptions.length > 0 && (
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                      {profile.customProgressOptions.map((status) => (
+                        <div key={status} className="flex items-center justify-between rounded-md border border-border p-2">
+                          {editingStatus === status ? (
+                            <div className="flex flex-1 items-center gap-2">
+                              <Input
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                className="h-8"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleRenameStatus(status);
+                                  if (e.key === "Escape") setEditingStatus(null);
+                                }}
+                              />
+                              <Button size="icon" variant="ghost" onClick={() => handleRenameStatus(status)} className="h-8 w-8 shrink-0">
+                                <Check className="h-4 w-4 text-primary" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={() => setEditingStatus(null)} className="h-8 w-8 shrink-0">
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-sm truncate mr-2">{status}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setEditingStatus(status); setEditingValue(status); }}>
+                                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDeleteStatus(status)}>
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="border-t border-border/50 pt-4">
+                    <form onSubmit={handleAddStatus} className="flex items-center gap-2">
+                      <Input
+                        value={newStatus}
+                        onChange={(e) => setNewStatus(e.target.value)}
+                        placeholder="Add new custom status..."
+                        className="h-9"
+                      />
+                      <Button type="submit" disabled={!newStatus.trim() || addingStatus} className="h-9 shrink-0 gradient-primary">
+                        {addingStatus && !editingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Add"}
+                      </Button>
+                    </form>
+                  </div>
+                </div>
               </DialogContent>
             </Dialog>
           </div>

@@ -275,3 +275,32 @@ export async function cancelVisit(
     timeline: [...timeline, timelineEntry],
   });
 }
+
+export async function migrateLeadProgress(userId: string, oldProgress: string, newProgress: string): Promise<void> {
+  const q = query(
+    collection(db, COLLECTION),
+    where("userId", "==", userId),
+    where("progress", "==", oldProgress)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return;
+
+  const now = Date.now();
+  const entry: TimelineEntry = { ts: now, note: `Status updated from "${oldProgress}" to "${newProgress}"`, action: "progress" };
+
+  // Firestore batch limit is 500 operations
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = writeBatch(db);
+    const slice = snap.docs.slice(i, i + 400);
+    for (const docSnap of slice) {
+      const data = docSnap.data();
+      const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+      batch.update(docSnap.ref, {
+        progress: newProgress,
+        updatedAt: now,
+        timeline: [...timeline, entry]
+      });
+    }
+    await batch.commit();
+  }
+}

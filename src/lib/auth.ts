@@ -6,7 +6,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { UseCase, UserProfile } from "./types";
 
@@ -84,5 +84,25 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 export async function addCustomProgressOption(uid: string, option: string): Promise<void> {
   await updateDoc(doc(db, "users", uid), {
     customProgressOptions: arrayUnion(option.trim()),
+  });
+}
+
+export async function removeCustomProgressOption(uid: string, option: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), {
+    customProgressOptions: arrayRemove(option.trim()),
+  });
+}
+
+export async function renameCustomProgressOption(uid: string, oldOption: string, newOption: string): Promise<void> {
+  const ref = doc(db, "users", uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const data = snap.data();
+  let options: string[] = Array.isArray(data.customProgressOptions) ? data.customProgressOptions : [];
+  
+  options = options.map((opt) => (opt === oldOption.trim() ? newOption.trim() : opt));
+  
+  await updateDoc(ref, {
+    customProgressOptions: options,
   });
 }
